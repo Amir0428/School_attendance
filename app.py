@@ -18,43 +18,45 @@ if "started" not in st.session_state:
 teacher_name = st.text_input("نام و نام خانوادگی معلم")
 subject_name = st.text_input("نام درس")
 
-uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌آموزان (.xlsx)", type=["xlsx"])
+uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌آموزان (.xls یا .xlsx)", type=["xls", "xlsx"])
 
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file)
         st.success("✅ فایل اکسل با موفقیت بارگذاری شد!")
         
-        # تشخیص خودکار ستون‌ها برای جلوگیری از خطا
-        columns = list(df.columns)
-        
-        st.write("📌 **انتخاب ستون‌های فایل اکسل:**")
-        col_name_col = st.selectbox("ستونی که حاوی 'نام و نام خانوادگی' است:", columns)
-        school_col = st.selectbox("ستونی که حاوی 'نام مدرسه' است:", columns)
-        class_col = st.selectbox("ستونی که حاوی 'نام کلاس' است:", columns)
-        
-        class_name = st.text_input("نام کلاسی که می‌خواهید حضور و غیاب کنید (دقیقاً مطابق مقدار داخل فایل اکسل):")
+        # دریافت شماره کلاس‌ها از ستون 'ردیف'
+        if 'ردیف' in df.columns and 'نام' in df.columns and 'نام خانوادگی' in df.columns:
+            class_list = df['ردیف'].dropna().unique().tolist()
+            st.info(f"📌 کلاس‌های موجود در فایل (ستون ردیف): {class_list}")
+            
+            selected_class = st.selectbox("انتخاب شماره کلاس:", class_list)
 
-        if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
-            if not teacher_name or not subject_name or not class_name:
-                st.warning("⚠️ لطفاً مشخصات معلم، درس و نام کلاس را کامل وارد کنید.")
-            else:
-                class_df = df[df[class_col].astype(str).str.strip() == class_name.strip()]
-                if class_df.empty:
-                    st.error(f"❌ هیچ دانش‌آموزی با مقدار '{class_name}' در این ستون یافت نشد!")
+            if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
+                if not teacher_name or not subject_name:
+                    st.warning("⚠️ لطفاً مشخصات معلم و درس را کامل وارد کنید.")
                 else:
-                    standard_students = []
-                    for _, row in class_df.iterrows():
-                        standard_students.append({
-                            "نام و نام خانوادگی": row[col_name_col],
-                            "اسم مدرسه": row[school_col],
-                            "اسم کلاس": row[class_col]
-                        })
-                    st.session_state.students = standard_students
-                    st.session_state.current_index = 0
-                    st.session_state.submitted_records = []
-                    st.session_state.started = True
-                    st.rerun()
+                    class_df = df[df['ردیف'].astype(str).str.strip() == str(selected_class).strip()]
+                    if class_df.empty:
+                        st.error("❌ هیچ دانش‌آموزی برای این کلاس یافت نشد!")
+                    else:
+                        standard_students = []
+                        for _, row in class_df.iterrows():
+                            # ترکیب نام و نام خانوادگی
+                            full_name = f"{str(row['نام']).strip()} {str(row['نام خانوادگی']).strip()}"
+                            school_name = row.get('مدرسه', 'نامشخص')
+                            standard_students.append({
+                                "نام و نام خانوادگی": full_name,
+                                "اسم مدرسه": school_name,
+                                "اسم کلاس": str(selected_class)
+                            })
+                        st.session_state.students = standard_students
+                        st.session_state.current_index = 0
+                        st.session_state.submitted_records = []
+                        st.session_state.started = True
+                        st.rerun()
+        else:
+            st.error("❌ ستون‌های 'ردیف'، 'نام' یا 'نام خانوادگی' در این فایل اکسل یافت نشدند.")
     except Exception as e:
         st.error(f"❌ خطا در خواندن فایل اکسل: {e}")
 
@@ -65,7 +67,7 @@ if st.session_state.get("started", False):
     
     if idx < len(students):
         student = students[idx]
-        st.info(f"📍 نفر {idx + 1} از {len(students)} | مدرسه: {student.get('اسم مدرسه', '')}")
+        st.info(f"📍 نفر {idx + 1} از {len(students)} | کلاس: {student.get('اسم کلاس', '')}")
         st.markdown(f"### 👤 نام دانش‌آموز: **{student.get('نام و نام خانوادگی', '')}**")
         
         with st.form(key=f"form_{idx}"):
@@ -114,3 +116,4 @@ if st.session_state.get("started", False):
             st.session_state.started = False
             st.session_state.current_index = 0
             st.rerun()
+                    
