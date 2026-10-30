@@ -1,5 +1,4 @@
-# School_attendance
-Nothing
+# School_attendanc
 import streamlit as st
 import pandas as pd
 from datetime import datetime
