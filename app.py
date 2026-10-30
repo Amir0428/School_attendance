@@ -4,7 +4,7 @@ import io
 from datetime import datetime
 import os
 
-st.set_page_config(page_title="سامانه حضور و غیاب مدرسه", page_icon="🏫")
+st.set_page_config(page_title="سامانه حضور و غیاب مدرسه", page_icon="🏫", layout="centered")
 
 st.markdown("<h2 style='text-align: center; color: #4F46E5;'>سامانه هوشمند حضور و غیاب و نمره‌دهی</h2>", unsafe_allow_html=True)
 st.write("---")
@@ -26,9 +26,7 @@ if uploaded_file is not None:
         bytes_data = uploaded_file.read()
         file_name = uploaded_file.name.lower()
         
-        # تشخیص هوشمند نوع فایل (CSV یا Excel)
         if file_name.endswith('.csv'):
-            # تلاش برای خواندن با انکودینگ‌های مختلف فارسی
             try:
                 df = pd.read_csv(io.BytesIO(bytes_data), encoding='utf-8')
             except:
@@ -41,13 +39,11 @@ if uploaded_file is not None:
             
         st.success("✅ فایل با موفقیت بارگذاری شد!")
         
-        # پاکسازی فاصله‌های اضافی نام ستون‌ها
         df.columns = [str(col).strip() for col in df.columns]
         columns = list(df.columns)
         
         st.info("📌 لطفاً مشخص کنید کدام ستون‌ها مربوط به اطلاعات زیر هستند:")
         
-        # پیدا کردن پیش‌فرض‌ها به صورت هوشمند
         default_class_idx = columns.index('ردیف') if 'ردیف' in columns else (columns.index('کلاس') if 'کلاس' in columns else 0)
         default_name_idx = columns.index('نام') if 'نام' in columns else 0
         default_family_idx = columns.index('نام خانوادگی') if 'نام خانوادگی' in columns else (1 if len(columns) > 1 else 0)
@@ -56,7 +52,6 @@ if uploaded_file is not None:
         col_name = st.selectbox("ستون مربوط به نام:", columns, index=default_name_idx)
         col_family = st.selectbox("ستون مربوط به نام خانوادگی:", columns, index=default_family_idx)
         
-        # استخراج کلاس‌های موجود
         class_list = df[col_class].dropna().unique().tolist()
         class_list = [str(c).strip() for c in class_list]
         
@@ -89,20 +84,71 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"❌ خطا در پردازش فایل: {e}")
 
-# پنل ثبت حضور و غیاب هر دانش‌آموز
+# پنل ثبت حضور و غیاب کارت‌محور برای هر دانش‌آموز
 if st.session_state.get("started", False):
     students = st.session_state.students
     idx = st.session_state.current_index
     
+    db_file = "central_school_database.xlsx"
+    history_df = pd.DataFrame()
+    if os.path.exists(db_file):
+        try:
+            history_df = pd.read_excel(db_file)
+        except:
+            pass
+
     if idx < len(students):
         student = students[idx]
-        st.info(f"📍 نفر {idx + 1} از {len(students)} | کلاس: {student.get('اسم کلاس', '')}")
-        st.markdown(f"### 👤 نام دانش‌آموز: **{student.get('نام و نام خانوادگی', '')}**")
+        student_name = student.get('نام و نام خانوادگی', '')
         
+        # استخراج سوابق قبلی این دانش‌آموز خاص از دیتابیس مرکزی
+        student_history = pd.DataFrame()
+        if not history_df.empty and 'نام دانش‌آموز' in history_df.columns:
+            student_history = history_df[history_df['نام دانش‌آموز'].astype(str).str.strip() == student_name.strip()]
+
+        # محاسبه آمار قبلی
+        avg_score = 0.0
+        absences = 0
+        lates = 0
+        notes_list = []
+        
+        if not student_history.empty:
+            valid_scores = student_history['نمره'].dropna()
+            if not valid_scores.empty:
+                avg_score = valid_scores.mean()
+            
+            if 'وضعیت' in student_history.columns:
+                absences = len(student_history[student_history['وضعیت'] == 'غایب'])
+                lates = len(student_history[student_history['وضعیت'] == 'تاخیر'])
+                
+            if 'یادداشت' in student_history.columns:
+                notes_list = student_history['یادداشت'].dropna().tolist()
+                notes_list = [str(n) for n in notes_list if str(n).strip() != "" and str(n).strip() != "nan"]
+
+        st.info(f"📍 نفر {idx + 1} از {len(students)} | کلاس: {student.get('اسم کلاس', '')}")
+        
+        # طراحی کادر اختصاصی اطلاعات دانش‌آموز (مشابه کارت مدرن مد نظر شما)
+        st.markdown(f"""
+        <div style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+            <h3 style="color: #1e293b; margin-top: 0; margin-bottom: 15px; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px;">👤 {student_name}</h3>
+            <p style="margin: 6px 0; color: #475569;">📊 <b>میانگین نمرات قبلی:</b> {avg_score:.1f} از 20</p>
+            <p style="margin: 6px 0; color: #475569;">❌ <b>تعداد غیبت‌ها:</b> {absences} &nbsp;&nbsp;|&nbsp;&nbsp; ⏰ <b>تاخیرها:</b> {lates}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # نمایش یادداشت‌های قبلی در صورت وجود
+        if notes_list:
+            with st.expander("📖 مشاهده یادداشت‌های ثبت شده‌ی قبلی"):
+                for note_item in notes_list:
+                    st.write(f"- {note_item}")
+
+        # فرم ثبت اطلاعات جدید با دکمه‌های فشاری سریع
         with st.form(key=f"form_{idx}"):
-            status = st.selectbox("وضعیت حضور", ["حاضر", "غایب", "تاخیر"])
-            score = st.number_input("نمره (اختیاری)", min_value=0.0, max_value=20.0, step=0.5, value=0.0)
-            note = st.text_area("یادداشت کوتاه (حداکثر ۱۰۰ حرف)", max_chars=100)
+            st.write("**ثبت وضعیت امروز:**")
+            status = st.radio("وضعیت حضور", ["حاضر", "غایب", "تاخیر"], horizontal=True, label_visibility="collapsed")
+            
+            score = st.number_input("نمره جلسه (اختیاری)", min_value=0.0, max_value=20.0, step=0.5, value=0.0)
+            note = st.text_area("یادداشت کوتاه جدید (حداکثر ۱۰۰ حرف)", max_chars=100)
             
             submitted = st.form_submit_button("ثبت و نفر بعدی ➡️", use_container_width=True)
             
@@ -113,10 +159,10 @@ if st.session_state.get("started", False):
                     "کلاس": student.get("اسم کلاس", "نامشخص"),
                     "درس": subject_name,
                     "معلم": teacher_name,
-                    "نام دانش‌آموز": student.get('نام و نام خانوادگی', 'نامشخص'),
+                    "نام دانش‌آموز": student_name,
                     "وضعیت": status,
                     "نمره": score if score > 0 else None,
-                    "یادداشت": note
+                    "یادداشت": note if note.strip() != "" else None
                 }
                 st.session_state.submitted_records.append(record)
                 st.session_state.current_index += 1
@@ -145,4 +191,3 @@ if st.session_state.get("started", False):
             st.session_state.started = False
             st.session_state.current_index = 0
             st.rerun()
-                    
