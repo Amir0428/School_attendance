@@ -18,36 +18,51 @@ if "started" not in st.session_state:
 teacher_name = st.text_input("نام و نام خانوادگی معلم")
 subject_name = st.text_input("نام درس")
 
-uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌آموزان (.xls یا .xlsx)", type=["xls", "xlsx"])
+uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌آموزان (.xlsx یا .xls)", type=["xls", "xlsx"])
 
 if uploaded_file is not None:
     try:
-        df = pd.read_excel(uploaded_file)
+        # خواندن فایل با موتور سازگار با xls و xlsx
+        df = pd.read_excel(uploaded_file, engine=None)
         st.success("✅ فایل اکسل با موفقیت بارگذاری شد!")
         
-        # دریافت شماره کلاس‌ها از ستون 'ردیف'
-        if 'ردیف' in df.columns and 'نام' in df.columns and 'نام خانوادگی' in df.columns:
-            class_list = df['ردیف'].dropna().unique().tolist()
-            st.info(f"📌 کلاس‌های موجود در فایل (ستون ردیف): {class_list}")
+        # پاکسازی نام ستون‌ها از فاصله‌های اضافی
+        df.columns = df.columns.str.strip()
+        
+        # پیدا کردن ستون ردیف یا کلاس
+        class_col = None
+        for col in df.columns:
+            if 'ردیف' in str(col) or 'کلاس' in str(col):
+                class_col = col
+                break
+        
+        if class_col is None and len(df.columns) > 0:
+            class_col = df.columns[0] # پیش‌فرض ستون اول
+
+        if class_col is not None:
+            class_list = df[class_col].dropna().unique().tolist()
+            class_list = [str(c).strip() for c in class_list]
             
-            selected_class = st.selectbox("انتخاب شماره کلاس:", class_list)
+            selected_class = st.selectbox(f"انتخاب کلاس (بر اساس ستون {class_col}):", class_list)
 
             if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
                 if not teacher_name or not subject_name:
                     st.warning("⚠️ لطفاً مشخصات معلم و درس را کامل وارد کنید.")
                 else:
-                    class_df = df[df['ردیف'].astype(str).str.strip() == str(selected_class).strip()]
+                    class_df = df[df[class_col].astype(str).str.strip() == str(selected_class).strip()]
                     if class_df.empty:
                         st.error("❌ هیچ دانش‌آموزی برای این کلاس یافت نشد!")
                     else:
                         standard_students = []
                         for _, row in class_df.iterrows():
-                            # ترکیب نام و نام خانوادگی
-                            full_name = f"{str(row['نام']).strip()} {str(row['نام خانوادگی']).strip()}"
-                            school_name = row.get('مدرسه', 'نامشخص')
+                            # پیدا کردن نام و نام خانوادگی به صورت هوشمند
+                            name_val = str(row.get('نام', row.get(df.columns[3], ''))).strip()
+                            family_val = str(row.get('نام خانوادگی', row.get(df.columns[4], ''))).strip()
+                            full_name = f"{name_val} {family_val}"
+                            
                             standard_students.append({
                                 "نام و نام خانوادگی": full_name,
-                                "اسم مدرسه": school_name,
+                                "اسم مدرسه": str(row.get('مدرسه', 'مدیربت مدرسه')),
                                 "اسم کلاس": str(selected_class)
                             })
                         st.session_state.students = standard_students
@@ -56,7 +71,7 @@ if uploaded_file is not None:
                         st.session_state.started = True
                         st.rerun()
         else:
-            st.error("❌ ستون‌های 'ردیف'، 'نام' یا 'نام خانوادگی' در این فایل اکسل یافت نشدند.")
+            st.error("❌ ستون کلاس یا ردیف در فایل اکسل یافت نشد.")
     except Exception as e:
         st.error(f"❌ خطا در خواندن فایل اکسل: {e}")
 
@@ -116,4 +131,4 @@ if st.session_state.get("started", False):
             st.session_state.started = False
             st.session_state.current_index = 0
             st.rerun()
-                    
+            
