@@ -15,6 +15,8 @@ if "current_index" not in st.session_state:
     st.session_state.current_index = 0
 if "started" not in st.session_state:
     st.session_state.started = False
+if "selected_class_name" not in st.session_state:
+    st.session_state.selected_class_name = ""
 
 teacher_name = st.text_input("نام و نام خانوادگی معلم")
 subject_name = st.text_input("نام درس")
@@ -166,4 +168,55 @@ if st.session_state.get("started", False):
     else:
         st.success("✅ حضور و غیاب این کلاس به پایان رسید!")
         
-        report
+        report_df = pd.DataFrame(st.session_state.submitted_records)
+        db_file = "central_school_database.xlsx"
+        
+        if os.path.exists(db_file):
+            existing_df = pd.read_excel(db_file)
+            pd.concat([existing_df, report_df], ignore_index=True).to_excel(db_file, index=False)
+        else:
+            report_df.to_excel(db_file, index=False)
+            
+        absent_students = report_df[report_df['وضعیت'] == 'غایب']['نام دانش‌آموز'].tolist()
+        late_students = report_df[report_df['وضعیت'] == 'تاخیر']['نام دانش‌آموز'].tolist()
+        
+        current_date_str = datetime.now().strftime("%Y/%m/%d")
+        class_str = st.session_state.get('selected_class_name', 'نامشخص')
+        
+        report_text = f"📋 گزارش حضور و غیاب کلاس {class_str}\n"
+        report_text += f"📚 درس: {subject_name} | 👨‍🏫 دبیر: {teacher_name}\n"
+        report_text += f"📅 تاریخ: {current_date_str}\n\n"
+        
+        if absent_students:
+            report_text += "❌ **دانش‌آموزان غایب:**\n"
+            for i, name in enumerate(absent_students, 1):
+                report_text += f"{i}. {name}\n"
+        else:
+            report_text += "❌ **دانش‌آموزان غایب:** موردی نداشت (کلاس کامل بود)\n"
+            
+        report_text += "\n"
+        if late_students:
+            report_text += "⏰ **دانش‌آموزان با تاخیر:**\n"
+            for i, name in enumerate(late_students, 1):
+                report_text += f"{i}. {name}\n"
+        else:
+            report_text += "⏰ **دانش‌آموزان با تاخیر:** موردی نداشت\n"
+
+        st.markdown("### 📤 متن گزارش جهت ارسال به مدیر / معاون:")
+        st.info("می‌توانید متن زیر را به راحتی کپی کرده و در پیام‌رسان‌ها ارسال کنید:")
+        
+        st.text_area("متن آماده گزارش:", value=report_text, height=200)
+        
+        st.download_button(
+            label="📥 دانلود فایل دیتابیس مرکزی مدرسه (گزارش کامل اکسل)",
+            data=open(db_file, "rb").read(),
+            file_name="central_school_database.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        
+        if st.button("شروع کلاس جدید 🔄", use_container_width=True):
+            st.session_state.started = False
+            st.session_state.current_index = 0
+            st.session_state.submitted_records = []
+            st.rerun()
