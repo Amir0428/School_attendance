@@ -1,4 +1,3 @@
-# School_attendanc
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -16,29 +15,48 @@ if "current_index" not in st.session_state:
 if "started" not in st.session_state:
     st.session_state.started = False
 
-# دریافت اطلاعات اولیه
 teacher_name = st.text_input("نام و نام خانوادگی معلم")
 subject_name = st.text_input("نام درس")
-class_name = st.text_input("نام کلاس (دقیقاً مطابق ستون 'اسم کلاس' در فایل اکسل)")
 
 uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌آموزان (.xlsx)", type=["xlsx"])
 
 if uploaded_file is not None:
-    df = pd.read_excel(uploaded_file)
-    
-    if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
-        if not teacher_name or not subject_name or not class_name:
-            st.warning("⚠️ لطفاً مشخصات معلم، درس و کلاس را کامل وارد کنید.")
-        else:
-            class_df = df[df["اسم کلاس"].astype(str).str.strip() == class_name.strip()]
-            if class_df.empty:
-                st.error("❌ هیچ دانش‌آموزی با این نام کلاس در فایل اکسل یافت نشد!")
+    try:
+        df = pd.read_excel(uploaded_file)
+        st.success("✅ فایل اکسل با موفقیت بارگذاری شد!")
+        
+        # تشخیص خودکار ستون‌ها برای جلوگیری از خطا
+        columns = list(df.columns)
+        
+        st.write("📌 **انتخاب ستون‌های فایل اکسل:**")
+        col_name_col = st.selectbox("ستونی که حاوی 'نام و نام خانوادگی' است:", columns)
+        school_col = st.selectbox("ستونی که حاوی 'نام مدرسه' است:", columns)
+        class_col = st.selectbox("ستونی که حاوی 'نام کلاس' است:", columns)
+        
+        class_name = st.text_input("نام کلاسی که می‌خواهید حضور و غیاب کنید (دقیقاً مطابق مقدار داخل فایل اکسل):")
+
+        if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
+            if not teacher_name or not subject_name or not class_name:
+                st.warning("⚠️ لطفاً مشخصات معلم، درس و نام کلاس را کامل وارد کنید.")
             else:
-                st.session_state.students = class_df.to_dict(orient="records")
-                st.session_state.current_index = 0
-                st.session_state.submitted_records = []
-                st.session_state.started = True
-                st.rerun()
+                class_df = df[df[class_col].astype(str).str.strip() == class_name.strip()]
+                if class_df.empty:
+                    st.error(f"❌ هیچ دانش‌آموزی با مقدار '{class_name}' در این ستون یافت نشد!")
+                else:
+                    standard_students = []
+                    for _, row in class_df.iterrows():
+                        standard_students.append({
+                            "نام و نام خانوادگی": row[col_name_col],
+                            "اسم مدرسه": row[school_col],
+                            "اسم کلاس": row[class_col]
+                        })
+                    st.session_state.students = standard_students
+                    st.session_state.current_index = 0
+                    st.session_state.submitted_records = []
+                    st.session_state.started = True
+                    st.rerun()
+    except Exception as e:
+        st.error(f"❌ خطا در خواندن فایل اکسل: {e}")
 
 # پنل ثبت حضور و غیاب هر دانش‌آموز
 if st.session_state.get("started", False):
@@ -47,7 +65,7 @@ if st.session_state.get("started", False):
     
     if idx < len(students):
         student = students[idx]
-        st.info(f"📍 نفر {idx + 1} از لینکی که سیستم بررسی می‌کند | مدرسه: {student.get('اسم مدرسه', '')}")
+        st.info(f"📍 نفر {idx + 1} از {len(students)} | مدرسه: {student.get('اسم مدرسه', '')}")
         st.markdown(f"### 👤 نام دانش‌آموز: **{student.get('نام و نام خانوادگی', '')}**")
         
         with st.form(key=f"form_{idx}"):
@@ -61,7 +79,7 @@ if st.session_state.get("started", False):
                 record = {
                     "تاریخ": datetime.now().strftime("%Y-%m-%d"),
                     "مدرسه": student.get("اسم مدرسه", "نامشخص"),
-                    "کلاس": class_name,
+                    "کلاس": student.get("اسم کلاس", "نامشخص"),
                     "درس": subject_name,
                     "معلم": teacher_name,
                     "نام دانش‌آموز": student.get('نام و نام خانوادگی', 'نامشخص'),
