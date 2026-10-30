@@ -19,14 +19,27 @@ if "started" not in st.session_state:
 teacher_name = st.text_input("نام و نام خانوادگی معلم")
 subject_name = st.text_input("نام درس")
 
-uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌آموزان (.xlsx یا .xls)", type=["xls", "xlsx"])
+uploaded_file = st.file_uploader("بارگذاری فایل دانش‌آموزان (فرمت .csv یا .xlsx یا .xls)", type=["csv", "xls", "xlsx"])
 
 if uploaded_file is not None:
     try:
-        # خواندن ایمن فایل با BytesIO
         bytes_data = uploaded_file.read()
-        df = pd.read_excel(io.BytesIO(bytes_data))
-        st.success("✅ فایل اکسل با موفقیت بارگذاری شد!")
+        file_name = uploaded_file.name.lower()
+        
+        # تشخیص هوشمند نوع فایل (CSV یا Excel)
+        if file_name.endswith('.csv'):
+            # تلاش برای خواندن با انکودینگ‌های مختلف فارسی
+            try:
+                df = pd.read_csv(io.BytesIO(bytes_data), encoding='utf-8')
+            except:
+                try:
+                    df = pd.read_csv(io.BytesIO(bytes_data), encoding='utf-8-sig')
+                except:
+                    df = pd.read_csv(io.BytesIO(bytes_data), encoding='latin1')
+        else:
+            df = pd.read_excel(io.BytesIO(bytes_data))
+            
+        st.success("✅ فایل با موفقیت بارگذاری شد!")
         
         # پاکسازی فاصله‌های اضافی نام ستون‌ها
         df.columns = [str(col).strip() for col in df.columns]
@@ -74,7 +87,7 @@ if uploaded_file is not None:
                     st.session_state.started = True
                     st.rerun()
     except Exception as e:
-        st.error(f"❌ خطا در پردازش فایل اکسل: {e}")
+        st.error(f"❌ خطا در پردازش فایل: {e}")
 
 # پنل ثبت حضور و غیاب هر دانش‌آموز
 if st.session_state.get("started", False):
