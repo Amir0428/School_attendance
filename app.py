@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 from datetime import datetime
 import os
 
@@ -22,58 +23,58 @@ uploaded_file = st.file_uploader("بارگذاری فایل اکسل دانش‌
 
 if uploaded_file is not None:
     try:
-        # خواندن فایل با موتور سازگار با xls و xlsx
-        df = pd.read_excel(uploaded_file, engine=None)
+        # خواندن ایمن فایل با BytesIO
+        bytes_data = uploaded_file.read()
+        df = pd.read_excel(io.BytesIO(bytes_data))
         st.success("✅ فایل اکسل با موفقیت بارگذاری شد!")
         
-        # پاکسازی نام ستون‌ها از فاصله‌های اضافی
-        df.columns = df.columns.str.strip()
+        # پاکسازی فاصله‌های اضافی نام ستون‌ها
+        df.columns = [str(col).strip() for col in df.columns]
+        columns = list(df.columns)
         
-        # پیدا کردن ستون ردیف یا کلاس
-        class_col = None
-        for col in df.columns:
-            if 'ردیف' in str(col) or 'کلاس' in str(col):
-                class_col = col
-                break
+        st.info("📌 لطفاً مشخص کنید کدام ستون‌ها مربوط به اطلاعات زیر هستند:")
         
-        if class_col is None and len(df.columns) > 0:
-            class_col = df.columns[0] # پیش‌فرض ستون اول
+        # پیدا کردن پیش‌فرض‌ها به صورت هوشمند
+        default_class_idx = columns.index('ردیف') if 'ردیف' in columns else (columns.index('کلاس') if 'کلاس' in columns else 0)
+        default_name_idx = columns.index('نام') if 'نام' in columns else 0
+        default_family_idx = columns.index('نام خانوادگی') if 'نام خانوادگی' in columns else (1 if len(columns) > 1 else 0)
+        
+        col_class = st.selectbox("ستون مربوط به کلاس / ردیف:", columns, index=default_class_idx)
+        col_name = st.selectbox("ستون مربوط به نام:", columns, index=default_name_idx)
+        col_family = st.selectbox("ستون مربوط به نام خانوادگی:", columns, index=default_family_idx)
+        
+        # استخراج کلاس‌های موجود
+        class_list = df[col_class].dropna().unique().tolist()
+        class_list = [str(c).strip() for c in class_list]
+        
+        selected_class = st.selectbox("انتخاب کلاس مورد نظر برای حضور و غیاب:", class_list)
 
-        if class_col is not None:
-            class_list = df[class_col].dropna().unique().tolist()
-            class_list = [str(c).strip() for c in class_list]
-            
-            selected_class = st.selectbox(f"انتخاب کلاس (بر اساس ستون {class_col}):", class_list)
-
-            if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
-                if not teacher_name or not subject_name:
-                    st.warning("⚠️ لطفاً مشخصات معلم و درس را کامل وارد کنید.")
+        if st.button("شروع حضور و غیاب 🚀", use_container_width=True):
+            if not teacher_name or not subject_name:
+                st.warning("⚠️ لطفاً نام معلم و نام درس را وارد کنید.")
+            else:
+                class_df = df[df[col_class].astype(str).str.strip() == str(selected_class).strip()]
+                if class_df.empty:
+                    st.error("❌ هیچ دانش‌آموزی در این کلاس یافت نشد!")
                 else:
-                    class_df = df[df[class_col].astype(str).str.strip() == str(selected_class).strip()]
-                    if class_df.empty:
-                        st.error("❌ هیچ دانش‌آموزی برای این کلاس یافت نشد!")
-                    else:
-                        standard_students = []
-                        for _, row in class_df.iterrows():
-                            # پیدا کردن نام و نام خانوادگی به صورت هوشمند
-                            name_val = str(row.get('نام', row.get(df.columns[3], ''))).strip()
-                            family_val = str(row.get('نام خانوادگی', row.get(df.columns[4], ''))).strip()
-                            full_name = f"{name_val} {family_val}"
-                            
-                            standard_students.append({
-                                "نام و نام خانوادگی": full_name,
-                                "اسم مدرسه": str(row.get('مدرسه', 'مدیربت مدرسه')),
-                                "اسم کلاس": str(selected_class)
-                            })
-                        st.session_state.students = standard_students
-                        st.session_state.current_index = 0
-                        st.session_state.submitted_records = []
-                        st.session_state.started = True
-                        st.rerun()
-        else:
-            st.error("❌ ستون کلاس یا ردیف در فایل اکسل یافت نشد.")
+                    standard_students = []
+                    for _, row in class_df.iterrows():
+                        n = str(row.get(col_name, '')).strip()
+                        f = str(row.get(col_family, '')).strip()
+                        full_name = f"{n} {f}"
+                        
+                        standard_students.append({
+                            "نام و نام خانوادگی": full_name,
+                            "اسم مدرسه": "مدیریت مدرسه",
+                            "اسم کلاس": str(selected_class)
+                        })
+                    st.session_state.students = standard_students
+                    st.session_state.current_index = 0
+                    st.session_state.submitted_records = []
+                    st.session_state.started = True
+                    st.rerun()
     except Exception as e:
-        st.error(f"❌ خطا در خواندن فایل اکسل: {e}")
+        st.error(f"❌ خطا در پردازش فایل اکسل: {e}")
 
 # پنل ثبت حضور و غیاب هر دانش‌آموز
 if st.session_state.get("started", False):
@@ -131,4 +132,4 @@ if st.session_state.get("started", False):
             st.session_state.started = False
             st.session_state.current_index = 0
             st.rerun()
-            
+                    
