@@ -80,6 +80,7 @@ if uploaded_file is not None:
                     st.session_state.current_index = 0
                     st.session_state.submitted_records = []
                     st.session_state.started = True
+                    st.session_state.selected_class_name = str(selected_class)
                     st.rerun()
     except Exception as e:
         st.error(f"❌ خطا در پردازش فایل: {e}")
@@ -101,12 +102,10 @@ if st.session_state.get("started", False):
         student = students[idx]
         student_name = student.get('نام و نام خانوادگی', '')
         
-        # استخراج سوابق قبلی این دانش‌آموز خاص از دیتابیس مرکزی
         student_history = pd.DataFrame()
         if not history_df.empty and 'نام دانش‌آموز' in history_df.columns:
             student_history = history_df[history_df['نام دانش‌آموز'].astype(str).str.strip() == student_name.strip()]
 
-        # محاسبه آمار قبلی
         avg_score = 0.0
         absences = 0
         lates = 0
@@ -127,7 +126,6 @@ if st.session_state.get("started", False):
 
         st.info(f"📍 نفر {idx + 1} از {len(students)} | کلاس: {student.get('اسم کلاس', '')}")
         
-        # طراحی کادر اختصاصی اطلاعات دانش‌آموز (مشابه کارت مدرن مد نظر شما)
         st.markdown(f"""
         <div style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
             <h3 style="color: #1e293b; margin-top: 0; margin-bottom: 15px; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px;">👤 {student_name}</h3>
@@ -136,13 +134,11 @@ if st.session_state.get("started", False):
         </div>
         """, unsafe_allow_html=True)
         
-        # نمایش یادداشت‌های قبلی در صورت وجود
         if notes_list:
             with st.expander("📖 مشاهده یادداشت‌های ثبت شده‌ی قبلی"):
                 for note_item in notes_list:
                     st.write(f"- {note_item}")
 
-        # فرم ثبت اطلاعات جدید با دکمه‌های فشاری سریع
         with st.form(key=f"form_{idx}"):
             st.write("**ثبت وضعیت امروز:**")
             status = st.radio("وضعیت حضور", ["حاضر", "غایب", "تاخیر"], horizontal=True, label_visibility="collapsed")
@@ -170,24 +166,4 @@ if st.session_state.get("started", False):
     else:
         st.success("✅ حضور و غیاب این کلاس به پایان رسید!")
         
-        report_df = pd.DataFrame(st.session_state.submitted_records)
-        db_file = "central_school_database.xlsx"
-        
-        if os.path.exists(db_file):
-            existing_df = pd.read_excel(db_file)
-            pd.concat([existing_df, report_df], ignore_index=True).to_excel(db_file, index=False)
-        else:
-            report_df.to_excel(db_file, index=False)
-            
-        st.download_button(
-            label="📥 دانلود فایل دیتابیس مرکزی مدرسه (گزارش کامل)",
-            data=open(db_file, "rb").read(),
-            file_name="central_school_database.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-        
-        if st.button("شروع کلاس جدید 🔄", use_container_width=True):
-            st.session_state.started = False
-            st.session_state.current_index = 0
-            st.rerun()
+        report
